@@ -1,58 +1,69 @@
 # Entrenamiento Angular – Día 1 (Guía Completa y Corregida)
-## Introducción Moderna a Angular, CSR vs SSR con Vite y prevención de NG0401
 
-Esta guía ha sido reestructurada para que puedas crear, ejecutar y depurar proyectos Angular 20 con Vite en **modo cliente (CSR)** y **modo servidor (SSR)** sin caer en el error **NG0401: Missing Platform**. Incluye:
-- Diferencias prácticas CSR vs SSR con Vite.
-- Estructura de archivos y para qué sirve cada uno.
-- Configuración correcta de `main.ts`, `main.server.ts`, `app.config.ts`, `app.config.server.ts`.
-- Scripts mínimos en `package.json` y *targets* en `angular.json`.
-- Checklist y troubleshooting paso a paso (incluye limpieza de caché y reinstalación).
+**Introducción Moderna a Angular 20, CSR vs SSR con Vite y Router funcional (Standalone)**
+
+Esta guía te lleva desde cero hasta un proyecto Angular 20 **plenamente funcional** con **componentes standalone**, **router configurado**, y compatibilidad tanto **CSR (cliente)** como **SSR (servidor)**.  
+Incluye todos los ajustes necesarios para evitar errores comunes como `NG0401` y `routerLink` inactivos.
 
 ---
 
 ## 0) Objetivos
-- Comprender el arranque moderno **standalone** (sin módulos) en Angular 20.
-- Crear proyectos con y sin SSR, sabiendo qué comandos usar en cada caso.
-- Evitar y solucionar **NG0401: Missing Platform**.
-- Tener una plantilla mínima y funcional para CSR y SSR.
+
+- Comprender el **arranque standalone** en Angular 20 (sin módulos).  
+- Configurar correctamente `app.ts`, `app.html`, y `app.routes.ts`.  
+- Crear proyectos con y sin **SSR**, sabiendo qué comandos usar en cada caso.  
+- Implementar un router funcional con navegación `<a routerLink>`.  
+- Evitar y solucionar **NG0401: Missing Platform** en SSR.  
 
 ---
 
 ## 1) ¿Qué es Angular hoy?
-Angular es un framework frontend (TypeScript) para construir **SPA** y apps con **SSR**. Desde Angular 17+:
-- Se fomenta el uso de **componentes standalone** (ya no necesitas `AppModule`).
-- **Vite** es el empaquetador por defecto.
-- Puedes elegir **CSR** (cliente) o **SSR** (renderizado en servidor con Node).
 
-**Piezas clave:**
-- `main.ts` → arranque en cliente.
-- `main.server.ts` → arranque en servidor (solo SSR).
-- `app.config.ts` y `app.config.server.ts` → configuración de *providers* para cliente y servidor.
-- Comandos distintos para ejecutar CSR y SSR.
+Angular 20 es un framework frontend basado en TypeScript para construir **Single Page Applications (SPA)** y aplicaciones **SSR**.  
+Desde la versión 17+:
+
+- Se usa **standalone** (no se requiere `AppModule`).  
+- **Vite** es el motor de build y servidor de desarrollo.  
+- Puedes elegir entre **CSR** o **SSR** según tus necesidades.
+
+**Archivos clave:**
+
+| Archivo | Rol |
+|----------|------|
+| `main.ts` | Entrada del cliente |
+| `main.server.ts` | Entrada del servidor (SSR) |
+| `app.ts` | Componente raíz standalone |
+| `app.html` | Plantilla principal con `<router-outlet>` |
+| `app.routes.ts` | Definición de rutas |
+| `app.config.ts` | Configuración global de providers |
+| `app.config.server.ts` | Configuración del servidor (SSR) |
 
 ---
 
-## 2) CSR vs SSR con Vite (diferencias reales)
+## 2) CSR vs SSR con Vite
+
 | Aspecto | CSR (Cliente) | SSR (Servidor) |
 |---|---|---|
-| Renderizado | En el navegador | En Node (prerender en servidor y luego hidrata en cliente) |
-| Comando típico | `ng serve` | `npm run dev:ssr` |
-| Archivos obligatorios | `main.ts`, `app.config.ts` | `main.ts`, `app.config.ts`, `main.server.ts`, `app.config.server.ts` |
-| `BootstrapContext` | No aplica | **Obligatorio** en `main.server.ts` |
-| SEO | Limitado | Mejor SEO (HTML del servidor) |
-| Performance inicial | Depende del cliente | Mejor TTFB (primera pintura desde el servidor) |
-| Complejidad | Menor | Mayor (dos pipelines: browser + server) |
+| Renderizado | En navegador | En Node.js |
+| Comando | `ng serve` | `npm run dev:ssr` |
+| Archivos necesarios | `main.ts`, `app.config.ts` | + `main.server.ts`, `app.config.server.ts` |
+| SEO | Limitado | Alto |
+| Complejidad | Menor | Mayor |
+| Errores típicos | - | `NG0401`, `document is not defined` |
 
 ---
 
-## 3) Instalación del entorno
-Verifica Node y npm:
+## 3) Instalación
+
+1. Verifica Node y npm:
+
 ```bash
 node -v
 npm -v
-# Recomendado Node 18+
 ```
-Instala Angular CLI:
+
+2. Instala Angular CLI:
+
 ```bash
 npm install -g @angular/cli
 ng version
@@ -61,312 +72,262 @@ ng version
 ---
 
 ## 4) Crear proyecto
-### 4.1 Solo Cliente (CSR)
+
+### CSR (Cliente)
+
 ```bash
 ng new mi-proyecto --ssr=false
 cd mi-proyecto
 ng serve
-# http://localhost:4200
 ```
-**Ventaja:** más simple para empezar.
 
-### 4.2 Con Servidor (SSR)
+### SSR (Servidor)
+
 ```bash
 ng new mi-proyecto --ssr
 cd mi-proyecto
-```
-Si tu `package.json` no incluye los scripts SSR, agrégalos (ver sección 7). Luego ejecuta:
-```bash
 npm run dev:ssr
-# o: ng run mi-proyecto:serve-ssr
 ```
-**Importante:** **No** arranques SSR con `ng serve` porque eso lanza solo el cliente.
+
+> ⚠️ Si `npm run dev:ssr` no existe, agrega los scripts en el `package.json` o ejecuta `ng add @angular/ssr`.
 
 ---
 
-## 5) Estructura de carpetas (Angular 20 + Vite)
-| Archivo/Carpeta | Uso |
-|---|---|
-| `src/app/` | Componentes, servicios, rutas. |
-| `src/app/app.ts` | Componente raíz **standalone**. |
-| `src/app/app.routes.ts` | Definición de rutas (opcional). |
-| `src/app/app.config.ts` | Configuración de **cliente** (providers, router, hidratación). |
-| `src/app/app.config.server.ts` | Configuración de **servidor** (añade `provideServerRendering()`). |
-| `src/main.ts` | Punto de entrada del cliente. |
-| `src/main.server.ts` | Punto de entrada del servidor (recibe y pasa `BootstrapContext`). |
-| `angular.json` | Targets de build/serve tanto browser como server. |
-| `package.json` | Scripts para CSR/SSR. |
-| `vite.config.ts` | Configuración de Vite. |
+## 5) Estructura general (Angular 20 + Vite)
+
+```
+src/
+ ├─ app/
+ │   ├─ app.ts
+ │   ├─ app.html
+ │   ├─ app.routes.ts
+ │   ├─ app.config.ts
+ │   ├─ saludo/
+ │   │   ├─ saludo.component.ts
+ │   │   └─ saludo.component.html
+ │   └─ acerca/
+ │       ├─ acerca.component.ts
+ │       └─ acerca.component.html
+ ├─ main.ts
+ ├─ main.server.ts
+ └─ index.html
+```
 
 ---
 
-## 6) Archivos base (copiar/pegar)
+## 6) Configuración base (Archivos principales)
 
-### 6.1 `src/app/app.ts` (componente raíz standalone)
+### 6.1 `index.html`
+
+Asegúrate de incluir el `<base href="/">` en `<head>`:
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <title>Angular 20 App</title>
+    <base href="/">
+  </head>
+  <body>
+    <app-root></app-root>
+  </body>
+</html>
+```
+
+---
+
+### 6.2 `src/app/app.html`
+
+```html
+<h1>Mi Proyecto Angular</h1>
+
+<nav>
+  <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Inicio</a> |
+  <a routerLink="/acerca" routerLinkActive="active">Acerca</a>
+</nav>
+
+<hr>
+
+<!-- Render dinámico de las rutas -->
+<router-outlet></router-outlet>
+```
+
+---
+
+### 6.3 `src/app/app.ts` (componente raíz standalone)
+
 ```ts
 import { Component } from '@angular/core';
+import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  template: \`
-    <h1>Angular 20 – CSR/SSR</h1>
-    <p>Proyecto base funcionando.</p>
-    <router-outlet></router-outlet>
-  \`,
+  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  templateUrl: './app.html',
 })
 export class App {}
 ```
 
-### 6.2 `src/app/app.config.ts` (cliente)
+---
+
+### 6.4 `src/app/app.routes.ts` (rutas funcionales)
+
+```ts
+import { Routes } from '@angular/router';
+
+export const routes: Routes = [
+  {
+    path: '',
+    pathMatch: 'full',
+    loadComponent: () => import('./saludo/saludo.component').then(m => m.SaludoComponent),
+  },
+  {
+    path: 'acerca',
+    loadComponent: () => import('./acerca/acerca.component').then(m => m.AcercaComponent),
+  },
+];
+```
+
+---
+
+### 6.5 `src/app/app.config.ts` (configuración del router y providers)
+
 ```ts
 import { ApplicationConfig, importProvidersFrom } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideClientHydration } from '@angular/platform-browser';
-import { FormsModule } from '@angular/forms';
-
-// Si no usas rutas, puedes poner: const routes = [];
 import { routes } from './app.routes';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(routes),
     provideClientHydration(),
-    importProvidersFrom(FormsModule),
   ],
 };
 ```
 
-### 6.3 `src/app/app.config.server.ts` (servidor)
-```ts
-import { ApplicationConfig } from '@angular/core';
-import { provideServerRendering } from '@angular/platform-server';
-import { appConfig } from './app.config';
+---
 
-export const appConfigServer: ApplicationConfig = {
-  ...appConfig,
-  providers: [
-    ...appConfig.providers!,
-    provideServerRendering(),
-  ],
-};
-```
+### 6.6 `src/main.ts`
 
-### 6.4 `src/main.ts` (cliente)
 ```ts
 import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
 import { App } from './app/app';
+import { appConfig } from './app/app.config';
 
 bootstrapApplication(App, appConfig)
-  .catch((err) => console.error(err));
-```
-
-### 6.5 `src/main.server.ts` (servidor) – evita NG0401
-```ts
-import { bootstrapApplication, BootstrapContext } from '@angular/platform-browser';
-import { App } from './app/app';
-import { appConfigServer } from './app/app.config.server';
-
-export default function bootstrap(context: BootstrapContext) {
-  // CLAVE: pasar el 'context' como tercer argumento
-  return bootstrapApplication(App, appConfigServer, context);
-}
-```
-
-> Alternativa (sin `app.config.server.ts`):
-```ts
-import { bootstrapApplication, BootstrapContext } from '@angular/platform-browser';
-import { provideServerRendering } from '@angular/platform-server';
-import { App } from './app/app';
-import { appConfig } from './app/app.config';
-
-export default function bootstrap(context: BootstrapContext) {
-  return bootstrapApplication(App, {
-    ...appConfig,
-    providers: [...(appConfig.providers ?? []), provideServerRendering()],
-  }, context);
-}
+  .catch(err => console.error(err));
 ```
 
 ---
 
-## 7) `package.json` – scripts mínimos SSR/CSR
-Ejemplo para un proyecto llamado `mi-proyecto` (ajusta el nombre si tu paquete se llama distinto):
-```json
-{
-  "name": "mi-proyecto",
-  "scripts": {
-    "start": "ng serve",
-    "build": "ng build",
-    "dev:ssr": "ng run mi-proyecto:serve-ssr",
-    "build:ssr": "ng run mi-proyecto:build-ssr",
-    "serve:ssr": "node dist/mi-proyecto/server/server.mjs"
-  }
-}
-```
-
-Si `npm run dev:ssr` dice “Missing script”, agrega esos scripts a mano **o** ejecuta:
-```bash
-ng add @angular/ssr
-```
-que suele completar la configuración automáticamente.
-
----
-
-## 8) `angular.json` – targets esperados para SSR
-Bloques relevantes (aproximado; el CLI puede variar ligeramente):
-
-```json
-{
-  "projects": {
-    "mi-proyecto": {
-      "projectType": "application",
-      "architect": {
-        "build": {
-          "builder": "@angular-devkit/build-angular:application",
-          "options": {
-            "outputPath": "dist/mi-proyecto/browser",
-            "index": "src/index.html",
-            "main": "src/main.ts",
-            "polyfills": ["zone.js"],
-            "assets": ["src/favicon.ico", "src/assets"],
-            "styles": ["src/styles.css"]
-          }
-        },
-        "server": {
-          "builder": "@angular-devkit/build-angular:server",
-          "options": {
-            "outputPath": "dist/mi-proyecto/server",
-            "main": "src/main.server.ts",
-            "tsConfig": "tsconfig.server.json"
-          }
-        },
-        "serve-ssr": {
-          "builder": "@nguniversal/builders:ssr-dev-server",
-          "options": {
-            "browserTarget": "mi-proyecto:build",
-            "serverTarget": "mi-proyecto:server"
-          }
-        },
-        "build-ssr": {
-          "builder": "@nguniversal/builders:ssr",
-          "options": {
-            "browserTarget": "mi-proyecto:build:production",
-            "serverTarget": "mi-proyecto:server:production"
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-Si faltan `server`, `serve-ssr` o `build-ssr`, ejecuta:
-```bash
-ng add @angular/ssr
-```
-
----
-
-## 9) Crear el primer componente (ejemplo rápido)
+## 7) Componentes de ejemplo
 
 ```bash
-ng generate component saludo
+ng generate component saludo --standalone
+ng generate component acerca --standalone
 ```
 
-`src/app/saludo/saludo.component.ts`:
+### `src/app/saludo/saludo.component.ts`
+
 ```ts
 import { Component } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 
 @Component({
-  selector: 'app-saludo',
   standalone: true,
-  template: \`
+  imports: [FormsModule],
+  template: `
     <h2>Bienvenido a Angular</h2>
     <input [(ngModel)]="nombre" placeholder="Escribe tu nombre">
     <p>Hola {{ nombre }}!</p>
-  \`
+  `
 })
 export class SaludoComponent {
   nombre = 'Coder';
 }
 ```
 
-Usa el componente en la plantilla del `App` o en una ruta. Si lo insertas directo en `app.ts`:
+### `src/app/acerca/acerca.component.ts`
+
 ```ts
-// ...
+import { Component } from '@angular/core';
+
 @Component({
-  selector: 'app-root',
   standalone: true,
-  imports: [SaludoComponent],
-  template: \`
-    <h1>Angular 20 – CSR/SSR</h1>
-    <app-saludo></app-saludo>
-  \`,
+  template: `
+    <h2>Acerca</h2>
+    <p>Aplicación base Angular con navegación funcional.</p>
+  `
 })
-export class App {}
+export class AcercaComponent {}
 ```
 
 ---
 
-## 10) Cómo arrancar correctamente
+## 8) Verificación del router
 
-### Solo cliente (CSR)
-```bash
-ng serve
-# http://localhost:4200
-```
+- En `/` debe verse el componente **SaludoComponent**.  
+- En `/acerca`, el **AcercaComponent**.  
+- Los links en `<nav>` deben cambiar la vista **sin recargar la página**.
 
-### Con servidor (SSR)
-```bash
-npm run dev:ssr
-# o: ng run mi-proyecto:serve-ssr
-```
+Si no navega: revisa `RouterLink` y que `RouterOutlet` esté importado en `App`.
 
 ---
 
-## 11) Troubleshooting (incluye NG0401)
+## 9) Solución de errores comunes
 
-### NG0401: Missing Platform
-- Causa: `main.server.ts` no pasa `BootstrapContext` a `bootstrapApplication` o falta `provideServerRendering()`.
-- Arreglo: Usa exactamente este patrón:
+###`routerLink` no hace nada
+
+**Causa:** `RouterLink` o `RouterOutlet` no importados en `App`.  
+**Solución:** agrega en `app.ts`:
 ```ts
+imports: [RouterOutlet, RouterLink, RouterLinkActive]
+```
+
+---
+
+###  `NG0401: Missing Platform`
+
+**Causa:** `main.server.ts` no pasa `BootstrapContext` o falta `provideServerRendering()`.  
+**Solución:** en `main.server.ts`:
+
+```ts
+import { bootstrapApplication, BootstrapContext } from '@angular/platform-browser';
+import { provideServerRendering } from '@angular/platform-server';
+import { App } from './app/app';
+import { appConfig } from './app/app.config';
+
 export default function bootstrap(context: BootstrapContext) {
-  return bootstrapApplication(App, appConfigServer, context);
+  return bootstrapApplication(
+    App,
+    {
+      ...appConfig,
+      providers: [...(appConfig.providers ?? []), provideServerRendering()],
+    },
+    context
+  );
 }
 ```
-y en la config del servidor añade `provideServerRendering()` (ya sea en `app.config.server.ts` o inline en `main.server.ts`).
-
-### “Missing script: dev:ssr”
-- Causa: tu `package.json` no tiene scripts SSR.
-- Arreglo: añade los scripts de la sección 7 o ejecuta `ng add @angular/ssr`.
-
-### Cambié archivos y sigue fallando
-- Limpia caché y reinstala:
-```bash
-rm -rf .angular/cache node_modules
-npm i
-```
-- Luego ejecuta el comando adecuado (CSR o SSR).
-
-### `document is not defined` en SSR
-- Causa: código que asume DOM en el servidor.
-- Arreglo: usa `isPlatformBrowser()` para condicionar código que toca `window`, `document`, etc.
 
 ---
 
-## 12) Checklist rápido
-- [ ] ¿Elegiste CSR o SSR y usas el **comando correcto**? (`ng serve` para CSR, `npm run dev:ssr` para SSR).  
-- [ ] ¿`main.server.ts` **pasa el `BootstrapContext`**?  
-- [ ] ¿Incluiste `provideServerRendering()` en la config de servidor?  
-- [ ] ¿`package.json` tiene los scripts `dev:ssr`, `build:ssr`, `serve:ssr`?  
-- [ ] ¿`angular.json` contiene los targets `server`, `serve-ssr`, `build-ssr`?  
-- [ ] ¿Borraste `.angular/cache` tras cambios de arranque?  
+## 10) Checklist final
+
+- [x] `<base href="/">` en `index.html`
+- [x] `<router-outlet>` en `app.html`
+- [x] `imports: [RouterOutlet, RouterLink, RouterLinkActive]` en `App`
+- [x] `provideRouter(routes)` en `app.config.ts`
+- [x] Rutas correctas en `app.routes.ts`
+- [x] `ng serve` o `npm run dev:ssr` según el modo
 
 ---
 
-## 13) Conclusiones
-- En Angular 20 la **configuración standalone** simplifica el arranque, pero SSR requiere **dos entradas** (cliente/servidor) y el **`BootstrapContext`** explícito.
-- Si empiezas, **CSR** es más simple. Activa **SSR** cuando necesites SEO, prerender o mejor TTFB.
-- Esta plantilla te permite alternar entre CSR y SSR sin caer en NG0401.
+## 11) Conclusión
+
+Esta versión de la guía incorpora todos los ajustes necesarios para que el router de Angular 20 funcione correctamente en **standalone mode**, evitando los errores de navegación y NG0401.  
+A partir de esta base, puedes extender el proyecto para los siguientes días de entrenamiento (Data Binding, Servicios, Formularios, etc.).
+
+---
