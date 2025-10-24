@@ -1,271 +1,332 @@
-# Entrenamiento Angular – Día 2: Data Binding y Directivas
+# Entrenamiento Angular – **Día 2**: Data Binding y Directivas  
+_Guía detallada con imports, ejemplos y comentarios_
 
-## Objetivos
-- Comprender y aplicar los 4 tipos de data binding en Angular.
-- Usar directivas estructurales (`*ngIf`, `*ngFor`) y de atributos (`[ngClass]`, `[ngStyle]`).
-- Construir un componente dinámico que gestione una lista de tareas.
-- Comprender el flujo de datos unidireccional y bidireccional en Angular.
-- Dominar la interacción entre vista (HTML) y lógica (TypeScript).
+> Objetivo del día: dominar los 4 tipos de **data binding** y las **directivas** principales, integrándolos en un componente funcional y **standalone**. Configuraremos correctamente `FormsModule`, `CommonModule`, `Router` y `HttpClient` para que todo compile sin NG errores.
 
 ---
 
-## 1) Fundamentos de Data Binding en Angular
+## 0) Recordatorio de configuración global (standalone)
 
-El **data binding** (enlace de datos) conecta el modelo de datos del componente con la vista (plantilla HTML).  
-Permite sincronizar información de manera declarativa, sin manipular directamente el DOM.
+### `app.config.ts` (proveedores globales)
+```ts
+import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { provideHttpClient } from '@angular/common/http';
+import { routes } from './app.routes';
 
-Angular ofrece **4 tipos de binding** principales:
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideBrowserGlobalErrorListeners(),
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes),
+    provideHttpClient() // Habilita HttpClient para toda la app
+  ]
+};
+```
+
+### `app.component.ts` (host con router)
+```ts
+import { Component } from '@angular/core';
+import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  template: `
+    <nav class="nav">
+      <a routerLink="/usuario" routerLinkActive="active">Usuarios</a>
+    </nav>
+    <router-outlet></router-outlet>
+  `
+})
+export class AppComponent {}
+```
+
+> Si no usas rutas, puedes omitir `Router*`, pero mantenemos este setup porque es el habitual.
+
+---
+
+## 1) Los 4 tipos de Data Binding
 
 | Tipo | Sintaxis | Dirección de datos | Descripción |
-|------|-----------|--------------------|--------------|
+|------|----------|--------------------|-------------|
 | Interpolación | `{{ variable }}` | Componente → Vista | Muestra valores en HTML |
 | Property Binding | `[propiedad]="variable"` | Componente → Vista | Enlaza atributos HTML a datos |
-| Event Binding | `(evento)="método()"` | Vista → Componente | Escucha eventos del usuario |
+| Event Binding | `(evento)="método($event)"` | Vista → Componente | Responde a eventos del usuario |
 | Two-Way Binding | `[(ngModel)]="variable"` | Bidireccional | Sincroniza vista y modelo |
+
+**Reglas rápidas**
+- `[(ngModel)]` requiere **FormsModule** en el **componente standalone**.
+- `*ngIf` / `*ngFor` requieren **CommonModule** (o usa `@if`/`@for` en Angular 17+).
 
 ---
 
-## 2) Interpolación ({{ }})
+## 2) Interpolación
 
-Permite mostrar el valor de una propiedad del componente dentro del HTML.
-
-```typescript
-export class AppComponent {
-  nombre = "Coder";
-}
+```ts
+nombre = 'Coder';
+contador = 0;
 ```
 
 ```html
 <h1>Hola {{ nombre }}</h1>
-<p>Bienvenido al curso de Angular</p>
-```
-
-**Claves:**
-- Solo puede contener **expresiones** (no estructuras de control ni asignaciones).
-- Evalúa dentro del **contexto del componente**.
-- Angular actualiza automáticamente el valor cuando el modelo cambia.
-
----
-
-## 3) Property Binding ([ ])
-
-Permite **enlazar propiedades del DOM** (como `src`, `alt`, `disabled`, etc.) a variables del componente.
-
-```typescript
-export class AppComponent {
-  urlImagen = "https://angular.io/assets/images/logos/angular/angular.png";
-  descripcion = "Logo oficial de Angular";
-}
-```
-
-```html
-<img [src]="urlImagen" [alt]="descripcion" width="200">
-```
-
-**Claves:**
-- Se usa para establecer valores dinámicos.
-- Angular sustituye el valor en tiempo de ejecución.
-
----
-
-## 4) Event Binding (( ))
-
-Permite **escuchar eventos del usuario** (clics, cambios, teclado, etc.) y ejecutar métodos del componente.
-
-```typescript
-export class AppComponent {
-  saludar() {
-    alert("¡Hola desde Angular!");
-  }
-}
-```
-
-```html
-<button (click)="saludar()">Saludar</button>
-```
-
-**Claves:**
-- El evento se pasa entre paréntesis.
-- Puede usarse también con `$event` para obtener información del evento.
-
-```html
-<input (input)="onInputChange($event)">
+<p>Clicks: {{ contador }}</p>
 ```
 
 ---
 
-## 5) Two-way Binding ([( )])
+## 3) Property Binding
 
-Combina **property binding** y **event binding** en un solo mecanismo.  
-Requiere importar `FormsModule` en la configuración del proyecto.
-
-```typescript
-export class AppComponent {
-  nombre: string = "";
-}
+```ts
+img = 'https://angular.io/assets/images/logos/angular/angular.png';
+alt = 'Logo de Angular';
+deshabilitado = false;
 ```
 
 ```html
-<input [(ngModel)]="nombre" placeholder="Escribe tu nombre">
-<p>Bienvenido {{ nombre }}</p>
+<img [src]="img" [alt]="alt" width="180">
+<button [disabled]="deshabilitado">Botón</button>
 ```
-
-**Claves:**
-- `[(ngModel)]` sincroniza el valor del input y la propiedad.
-- Ideal para formularios y edición de datos en tiempo real.
 
 ---
 
-## 6) Directivas en Angular
+## 4) Event Binding
 
-Las **directivas** son instrucciones que extienden el comportamiento de elementos HTML.
-
-### 6.1 Directivas estructurales (`*`)
-
-Modifican la estructura del DOM (añaden o eliminan elementos).
-
-#### *ngIf
-Muestra o elimina elementos según una condición.
-
-```typescript
-export class AppComponent {
-  visible = true;
-}
+```ts
+contador = 0;
+sumar() { this.contador++; }
 ```
 
 ```html
-<p *ngIf="visible">Este texto se muestra solo si 'visible' es true.</p>
-<button (click)="visible = !visible">Alternar visibilidad</button>
+<button (click)="sumar()">Sumar</button>
 ```
 
-#### *ngFor
-Itera sobre un arreglo para generar elementos dinámicamente.
+Con `$event`:
+```html
+<input (input)="onInput($event)">
+```
 
-```typescript
-export class AppComponent {
-  items = ["Angular", "React", "Vue"];
-}
+---
+
+## 5) Two-Way Binding ([(ngModel)])
+
+```ts
+modelo = '';
 ```
 
 ```html
+<input [(ngModel)]="modelo" name="modelo" placeholder="Escribe algo" />
+<p>Valor: {{ modelo }}</p>
+```
+
+> **Importante**: el `input` debe tener `name="..."` para que Angular forms no advierta.
+
+---
+
+## 6) Directivas
+
+### 6.1 Estructurales
+- `*ngIf` y `*ngFor` → requieren `CommonModule` en `imports` del componente.
+
+```ts
+visible = true;
+items = ['Angular', 'React', 'Vue'];
+```
+
+```html
+<p *ngIf="visible">Texto visible</p>
 <ul>
-  <li *ngFor="let item of items; index as i">{{ i + 1 }} - {{ item }}</li>
+  <li *ngFor="let i of items; index as idx">{{ idx + 1 }} - {{ i }}</li>
 </ul>
 ```
 
----
-
-### 6.2 Directivas de atributos
-
-Alteran la apariencia o el comportamiento de un elemento existente.
-
-#### [ngClass]
-Aplica clases CSS condicionalmente.
-
-```typescript
-export class AppComponent {
-  hayError = true;
+**Alternativa moderna (Angular 17+):**
+```html
+@if (visible) {
+  <p>Texto visible</p>
+}
+@for (i of items; track i) {
+  <li>{{ i }}</li>
 }
 ```
 
-```html
-<div [ngClass]="{ error: hayError, correcto: !hayError }">Estado actual</div>
+### 6.2 De atributo
+```ts
+hayError = true;
 ```
 
-#### [ngStyle]
-Aplica estilos en función de valores dinámicos.
-
 ```html
-<div [ngStyle]="{ color: hayError ? 'red' : 'green' }">
-  Texto con estilo dinámico
-</div>
+<div [ngClass]="{ error: hayError, ok: !hayError }">Estado</div>
+<div [ngStyle]="{ color: hayError ? 'red' : 'green' }">Color dinámico</div>
 ```
 
 ---
 
-## 7) Ejemplo práctico: Lista de Tareas
+## 7) Ejemplo práctico — **UsuarioComponent** (completo y documentado)
 
-Generar un componente con Angular CLI:
+> Archivos: `src/app/usuario/usuario.component.ts`, `usuario.html`, `usuario.css`
 
+**`usuario.component.ts`**
+```ts
+import { Component, OnInit } from '@angular/core';
+import { FormsModule } from '@angular/forms';      // Necesario para [(ngModel)]
+import { CommonModule } from '@angular/common';    // Necesario para *ngIf y *ngFor
+import { UsuarioService } from '../service/usuario.service';
+
+/**
+ * Componente para gestionar usuarios (listar y crear).
+ * Aplica Interpolación, Event Binding, Two-way Binding y directivas.
+ */
+@Component({
+  selector: 'app-usuario',
+  standalone: true,
+  imports: [FormsModule, CommonModule],
+  templateUrl: './usuario.html',
+  styleUrls: ['./usuario.css'],
+})
+export class UsuarioComponent implements OnInit {
+  nombre = 'Coder';
+  listUsuarios: any[] = [];
+  visible = true; // para *ngIf
+
+  constructor(private svc: UsuarioService) {}
+
+  ngOnInit(): void {
+    this.listarUsuarios();
+  }
+
+  agregarUsuario() {
+    const nuevo = { nombre: this.nombre?.trim() };
+    if (!nuevo.nombre) { alert('El nombre es requerido'); return; }
+
+    this.svc.create(nuevo).subscribe({
+      next: () => this.listarUsuarios(),
+      error: (e) => console.error('Error al crear usuario:', e),
+    });
+  }
+
+  listarUsuarios() {
+    this.svc.getAll().subscribe({
+      next: (usuarios) => {
+        console.log('Usuarios obtenidos:', usuarios);
+        this.listUsuarios = Array.isArray(usuarios) ? usuarios : (usuarios?.content ?? []);
+      },
+      error: (e) => console.error('Error al listar usuarios:', e),
+    });
+  }
+}
+```
+
+**`usuario.html`**
+```html
+<h2>Gestión de Usuarios</h2>
+
+<input [(ngModel)]="nombre" name="nombre" placeholder="Nombre" />
+<button (click)="agregarUsuario()">Agregar</button>
+<button (click)="listarUsuarios()">Listar</button>
+<button (click)="visible = !visible">Mostrar/Ocultar</button>
+
+<ul *ngIf="visible && listUsuarios.length > 0; else noData">
+  <li *ngFor="let u of listUsuarios">{{ u.nombre }}</li>
+</ul>
+
+<ng-template #noData>
+  <p>No hay usuarios registrados.</p>
+</ng-template>
+```
+
+**`usuario.css`**
+```css
+h2{margin-bottom:12px}
+input{margin-right:8px}
+button{margin-right:6px}
+```
+
+---
+
+## 8) Servicio HTTP (`UsuarioService`)
+
+> Archivo: `src/app/service/usuario.service.ts`
+
+```ts
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+export interface Usuario { id?: number; nombre: string; }
+
+@Injectable({ providedIn: 'root' })
+export class UsuarioService {
+  private readonly apiUrl = '/api/v1/usuario'; // usa proxy en dev o habilita CORS
+
+  constructor(private http: HttpClient) {}
+
+  getAll(): Observable<Usuario[]> {
+    return this.http.get<Usuario[]>(this.apiUrl);
+  }
+  create(usuario: Usuario): Observable<Usuario> {
+    return this.http.post<Usuario>(this.apiUrl, usuario);
+  }
+}
+```
+
+---
+
+## 9) Rutas y navegación
+
+> Archivo: `src/app/app.routes.ts`
+```ts
+import { Routes } from '@angular/router';
+import { UsuarioComponent } from './usuario/usuario.component';
+
+export const routes: Routes = [
+  { path: '', redirectTo: 'usuario', pathMatch: 'full' },
+  { path: 'usuario', component: UsuarioComponent },
+];
+```
+
+> Host con `<router-outlet>` ya lo definimos en el **0)**.
+
+---
+
+## 10) Proxy Angular (opcional) para evitar CORS
+
+**`proxy.conf.json`**
+```json
+{
+  "/api": {
+    "target": "http://localhost:8080",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}
+```
+
+Lanzar:
 ```bash
-ng generate component lista-tareas
+ng serve --proxy-config proxy.conf.json
 ```
 
-### `lista-tareas.component.ts`
-```typescript
-export class ListaTareasComponent {
-  nuevaTarea: string = "";
-  tareas: string[] = [];
-  visible: boolean = true;
-
-  agregarTarea() {
-    if (this.nuevaTarea.trim()) {
-      this.tareas.push(this.nuevaTarea);
-      this.nuevaTarea = "";
-    }
-  }
-
-  toggleVisibilidad() {
-    this.visible = !this.visible;
-  }
-}
-```
-
-### `lista-tareas.component.html`
-```html
-<h2>Lista de Tareas</h2>
-
-<input [(ngModel)]="nuevaTarea" placeholder="Nueva tarea">
-<button (click)="agregarTarea()">Agregar</button>
-<button (click)="toggleVisibilidad()">Mostrar/Ocultar</button>
-
-<ul *ngIf="visible">
-  <li *ngFor="let tarea of tareas; index as i">
-    {{ i + 1 }} - {{ tarea }}
-  </li>
-</ul>
-```
-
-**Conceptos aplicados:**
-- `[(ngModel)]` → two-way binding para capturar el input.
-- `(click)` → event binding para agregar tareas.
-- `*ngIf` → mostrar u ocultar la lista.
-- `*ngFor` → iterar sobre las tareas.
+En el servicio usa `'/api/v1/usuario'`.
 
 ---
 
-## 8) Ejercicio del día
+## 11) Errores comunes (y su solución rápida)
 
-1. Crea el componente `lista-tareas` usando Angular CLI.  
-2. Implementa la lógica para añadir nuevas tareas.  
-3. Muestra las tareas en una lista con `*ngFor`.  
-4. Añade un botón para alternar visibilidad con `*ngIf`.  
-5. Usa `[ngClass]` para resaltar tareas completadas (opcional).
-
-### Resultado esperado
-- El usuario escribe tareas en un input y las añade con un botón.  
-- Las tareas se muestran dinámicamente.  
-- Se puede mostrar/ocultar la lista.  
-- Se refuerza el uso de los 4 tipos de data binding y directivas principales.
+- **NgFor/NgIf not found** → falta `CommonModule` en `imports` (o usa `@for/@if`).  
+- **Can’t bind to ngModel** → falta `FormsModule` y `name="..."` en el `<input>`.  
+- **403 (Forbidden) en POST** → CORS/CSRF backend (usa proxy o ajusta Spring Security).  
+- **500 (Table not found)** → habilita `spring.jpa.hibernate.ddl-auto=update` o crea la tabla.  
+- **ENOSPC watchers** (Linux) → aumenta límites `inotify` (ver Día 1, §5.2).
 
 ---
 
-## 9) Recomendaciones finales
+## 12) Tarea rápida
 
-- Usa **interpolación** para mostrar valores simples.
-- Usa **property binding** cuando necesites manipular atributos del DOM.
-- Usa **event binding** para responder a acciones del usuario.
-- Usa **two-way binding** en formularios o inputs interactivos.
-- Combina directivas estructurales y de atributos para lograr componentes dinámicos y expresivos.
-- Refactoriza tu código usando **componentes reutilizables** con inputs y outputs (ver Día 3).
+- Añade `[ngClass]` para marcar usuarios con nombre largo (>10 chars).  
+- Cambia `*ngFor` por `@for` y compara rendimiento.  
+- Extra: crea un pipe para capitalizar `nombre`.
 
----
-
-## 10) Conclusiones
-
-- Los tipos de binding definen cómo fluyen los datos entre la lógica y la vista.
-- Las directivas hacen que el HTML sea **reactivo y declarativo**.
-- El enfoque standalone facilita el aprendizaje: cada componente es autónomo.
-- Con Angular puedes crear interfaces reactivas sin manipular directamente el DOM.
-
----
+¡Día 2 completado! 

@@ -1,162 +1,113 @@
-# Entrenamiento Angular – Día 1 (Guía Completa y Corregida)
+# Entrenamiento Angular – **Día 1** (Standalone + Vite)  
+_Guía completa paso a paso, con imports, scripts y troubleshooting_
 
-**Introducción Moderna a Angular 20, CSR vs SSR con Vite y Router funcional (Standalone)**
-
-Esta guía te lleva desde cero hasta un proyecto Angular 20 **plenamente funcional** con **componentes standalone**, **router configurado**, y compatibilidad tanto **CSR (cliente)** como **SSR (servidor)**.  
-Incluye todos los ajustes necesarios para evitar errores comunes como `NG0401` y `routerLink` inactivos.
+> Objetivo del día: **crear, ejecutar y depurar** un proyecto Angular **standalone** (sin NgModules) con **Vite**, entendiendo el arranque (bootstrap), rutas, `HttpClient` y cómo evitar errores típicos como **NG0401** y “**ENOSPC: file watchers**”.
 
 ---
 
-## 0) Objetivos
+## 0) Requisitos previos
 
-- Comprender el **arranque standalone** en Angular 20 (sin módulos).  
-- Configurar correctamente `app.ts`, `app.html`, y `app.routes.ts`.  
-- Crear proyectos con y sin **SSR**, sabiendo qué comandos usar en cada caso.  
-- Implementar un router funcional con navegación `<a routerLink>`.  
-- Evitar y solucionar **NG0401: Missing Platform** en SSR.  
+- **Node.js 18+** (recomendado LTS):  
+  ```bash
+  node -v
+  npm -v
+  ```
+- **Angular CLI 17/18/19/20** (cualquiera reciente):  
+  ```bash
+  npm i -g @angular/cli
+  ng version
+  ```
 
----
-
-## 1) ¿Qué es Angular hoy?
-
-Angular 20 es un framework frontend basado en TypeScript para construir **Single Page Applications (SPA)** y aplicaciones **SSR**.  
-Desde la versión 17+:
-
-- Se usa **standalone** (no se requiere `AppModule`).  
-- **Vite** es el motor de build y servidor de desarrollo.  
-- Puedes elegir entre **CSR** o **SSR** según tus necesidades.
-
-**Archivos clave:**
-
-| Archivo | Rol |
-|----------|------|
-| `main.ts` | Entrada del cliente |
-| `main.server.ts` | Entrada del servidor (SSR) |
-| `app.ts` | Componente raíz standalone |
-| `app.html` | Plantilla principal con `<router-outlet>` |
-| `app.routes.ts` | Definición de rutas |
-| `app.config.ts` | Configuración global de providers |
-| `app.config.server.ts` | Configuración del servidor (SSR) |
+> Si usas Linux/WSL y abres muchos proyectos, mira la sección **Troubleshooting** para ampliar watchers.
 
 ---
 
-## 2) CSR vs SSR con Vite
-
-| Aspecto | CSR (Cliente) | SSR (Servidor) |
-|---|---|---|
-| Renderizado | En navegador | En Node.js |
-| Comando | `ng serve` | `npm run dev:ssr` |
-| Archivos necesarios | `main.ts`, `app.config.ts` | + `main.server.ts`, `app.config.server.ts` |
-| SEO | Limitado | Alto |
-| Complejidad | Menor | Mayor |
-| Errores típicos | - | `NG0401`, `document is not defined` |
-
----
-
-## 3) Instalación
-
-1. Verifica Node y npm:
+## 1) Crear el proyecto (CSR con Vite)
 
 ```bash
-node -v
-npm -v
+ng new mi-primer-proyecto --ssr=false --routing=true --style=css
+cd mi-primer-proyecto
 ```
 
-2. Instala Angular CLI:
+La CLI generará una app **standalone** con **router** y **Vite**.
 
+**Scripts en `package.json`** (la CLI los añade automáticamente):
+```json
+{
+  "scripts": {
+    "start": "ng serve",
+    "build": "ng build",
+    "test": "ng test"
+  }
+}
+```
+
+**Ejecutar en desarrollo:**
 ```bash
-npm install -g @angular/cli
-ng version
+npm start
+# Abre http://localhost:4200
 ```
 
 ---
 
-## 4) Crear proyecto
-
-### CSR (Cliente)
-
-```bash
-ng new mi-proyecto --ssr=false
-cd mi-proyecto
-ng serve
-```
-
-### SSR (Servidor)
-
-```bash
-ng new mi-proyecto --ssr
-cd mi-proyecto
-npm run dev:ssr
-```
-
-> ⚠️ Si `npm run dev:ssr` no existe, agrega los scripts en el `package.json` o ejecuta `ng add @angular/ssr`.
-
----
-
-## 5) Estructura general (Angular 20 + Vite)
+## 2) Estructura mínima (standalone)
 
 ```
 src/
- ├─ app/
- │   ├─ app.ts
- │   ├─ app.html
- │   ├─ app.routes.ts
- │   ├─ app.config.ts
- │   ├─ saludo/
- │   │   ├─ saludo.component.ts
- │   │   └─ saludo.component.html
- │   └─ acerca/
- │       ├─ acerca.component.ts
- │       └─ acerca.component.html
- ├─ main.ts
- ├─ main.server.ts
- └─ index.html
+  app/
+    app.component.ts
+    app.component.html
+    app.routes.ts
+    app.config.ts
+  main.ts
 ```
 
----
+- **main.ts** hace el `bootstrapApplication`.
+- **app.config.ts** registra **router** y **HttpClient** (proveedores).
+- **app.routes.ts** define rutas.
+- **app.component.ts** es standalone e importa `RouterOutlet` para renderizar rutas.
 
-## 6) Configuración base (Archivos principales)
+### 2.1 `main.ts`
+```ts
+import { bootstrapApplication } from '@angular/platform-browser';
+import { AppComponent } from './app/app.component';
+import { appConfig } from './app/app.config';
 
-### 6.1 `index.html`
-
-Asegúrate de incluir el `<base href="/">` en `<head>`:
-
-```html
-<!DOCTYPE html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8">
-    <title>Angular 20 App</title>
-    <base href="/">
-  </head>
-  <body>
-    <app-root></app-root>
-  </body>
-</html>
+bootstrapApplication(AppComponent, appConfig)
+  .catch(err => console.error(err));
 ```
 
----
+### 2.2 `app.config.ts` (proveedores globales)
+```ts
+import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { provideHttpClient } from '@angular/common/http';
+import { routes } from './app.routes';
 
-### 6.2 `src/app/app.html`
-
-```html
-<h1>Mi Proyecto Angular</h1>
-
-<nav>
-  <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Inicio</a> |
-  <a routerLink="/acerca" routerLinkActive="active">Acerca</a>
-</nav>
-
-<hr>
-
-<!-- Render dinámico de las rutas -->
-<router-outlet></router-outlet>
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideBrowserGlobalErrorListeners(),      // logs de errores del navegador (opcional)
+    provideZoneChangeDetection({ eventCoalescing: true }), // perf opcional
+    provideRouter(routes),                     // rutas
+    provideHttpClient()                        // HttpClient para toda la app
+  ]
+};
 ```
 
----
+> Alternativa “zoneless”: `provideZonelessChangeDetection()` si dominas CD sin zone.
 
-### 6.3 `src/app/app.ts` (componente raíz standalone)
+### 2.3 `app.routes.ts` (rutas)
+```ts
+import { Routes } from '@angular/router';
+import { AppComponent } from './app.component'; // solo si vas a usarlo en ruta raíz (no necesario)
 
+export const routes: Routes = [
+  { path: '', loadComponent: () => import('./usuario/usuario.component').then(m => m.UsuarioComponent) },
+  // { path: '**', loadComponent: () => import('./not-found/not-found.component').then(m => m.NotFoundComponent) }
+];
+```
+
+### 2.4 `app.component.ts` (host + router-outlet)
 ```ts
 import { Component } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
@@ -165,169 +116,196 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
   selector: 'app-root',
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
-  templateUrl: './app.html',
-})
-export class App {}
-```
-
----
-
-### 6.4 `src/app/app.routes.ts` (rutas funcionales)
-
-```ts
-import { Routes } from '@angular/router';
-
-export const routes: Routes = [
-  {
-    path: '',
-    pathMatch: 'full',
-    loadComponent: () => import('./saludo/saludo.component').then(m => m.SaludoComponent),
-  },
-  {
-    path: 'acerca',
-    loadComponent: () => import('./acerca/acerca.component').then(m => m.AcercaComponent),
-  },
-];
-```
-
----
-
-### 6.5 `src/app/app.config.ts` (configuración del router y providers)
-
-```ts
-import { ApplicationConfig, importProvidersFrom } from '@angular/core';
-import { provideRouter } from '@angular/router';
-import { provideClientHydration } from '@angular/platform-browser';
-import { routes } from './app.routes';
-
-export const appConfig: ApplicationConfig = {
-  providers: [
-    provideRouter(routes),
-    provideClientHydration(),
-  ],
-};
-```
-
----
-
-### 6.6 `src/main.ts`
-
-```ts
-import { bootstrapApplication } from '@angular/platform-browser';
-import { App } from './app/app';
-import { appConfig } from './app/app.config';
-
-bootstrapApplication(App, appConfig)
-  .catch(err => console.error(err));
-```
-
----
-
-## 7) Componentes de ejemplo
-
-```bash
-ng generate component saludo --standalone
-ng generate component acerca --standalone
-```
-
-### `src/app/saludo/saludo.component.ts`
-
-```ts
-import { Component } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-
-@Component({
-  standalone: true,
-  imports: [FormsModule],
   template: `
-    <h2>Bienvenido a Angular</h2>
-    <input [(ngModel)]="nombre" placeholder="Escribe tu nombre">
-    <p>Hola {{ nombre }}!</p>
-  `
+    <nav class="nav">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Inicio</a>
+    </nav>
+    <router-outlet></router-outlet>
+  `,
+  styles: [`.nav{display:flex;gap:12px;margin-bottom:16px}`]
 })
-export class SaludoComponent {
+export class AppComponent {}
+```
+
+---
+
+## 3) Crear el **feature** Usuario (component + service)
+
+### 3.1 Componente `UsuarioComponent`
+Crea carpeta `src/app/usuario/` y dentro dos archivos:
+
+**`usuario.component.ts`**
+```ts
+// Importaciones necesarias para el componente Usuario
+import { Component, OnInit } from '@angular/core';
+import { FormsModule } from '@angular/forms';      // [(ngModel)]
+import { CommonModule } from '@angular/common';    // *ngIf, *ngFor
+import { UsuarioService } from '../service/usuario.service';
+
+/**
+ * Componente para gestionar usuarios en la aplicación
+ * Permite listar y agregar usuarios utilizando el servicio UsuarioService
+ */
+@Component({
+  selector: 'app-usuario',
+  standalone: true, // Necesario para que 'imports' funcione en componentes independientes
+  imports: [FormsModule, CommonModule],
+  templateUrl: './usuario.html',
+  styleUrls: ['./usuario.css'], // 👈 plural correcto
+})
+export class UsuarioComponent implements OnInit {
+  /** Nombre del usuario a agregar (enlazado al formulario) */
   nombre = 'Coder';
+
+  /** Lista de usuarios obtenida desde la API */
+  listUsuarios: any[] = [];
+
+  /** Inyección del servicio UsuarioService para operaciones CRUD */
+  constructor(private svc: UsuarioService) {}
+
+  /** Método del ciclo de vida que se ejecuta al inicializar el componente */
+  ngOnInit(): void {
+    this.listarUsuarios();
+  }
+
+  agregarUsuario() {
+    const nuevo = { nombre: this.nombre?.trim() };
+    if (!nuevo.nombre) { alert('El nombre es requerido'); return; }
+
+    this.svc.create(nuevo).subscribe({
+      next: () => this.listarUsuarios(),      // recarga después de crear
+      error: (e) => console.error('Error al crear usuario:', e),
+    });
+  }
+
+  listarUsuarios() {
+    this.svc.getAll().subscribe({
+      next: (usuarios) => {
+        console.log('Usuarios obtenidos:', usuarios);
+        this.listUsuarios = Array.isArray(usuarios) ? usuarios : (usuarios?.content ?? []);
+      },
+      error: (e) => console.error('Error al listar usuarios:', e),
+    });
+  }
 }
 ```
 
-### `src/app/acerca/acerca.component.ts`
+**`usuario.html`**
+```html
+<h2>Gestión de Usuarios</h2>
 
-```ts
-import { Component } from '@angular/core';
+<input [(ngModel)]="nombre" name="nombre" placeholder="Nombre" />
+<button (click)="agregarUsuario()">Agregar</button>
+<button (click)="listarUsuarios()">Listar</button>
 
-@Component({
-  standalone: true,
-  template: `
-    <h2>Acerca</h2>
-    <p>Aplicación base Angular con navegación funcional.</p>
-  `
-})
-export class AcercaComponent {}
+<ul *ngIf="listUsuarios.length > 0; else noData">
+  <li *ngFor="let u of listUsuarios">{{ u.nombre }}</li>
+</ul>
+
+<ng-template #noData>
+  <p>No hay usuarios registrados.</p>
+</ng-template>
 ```
 
----
-
-## 8) Verificación del router
-
-- En `/` debe verse el componente **SaludoComponent**.  
-- En `/acerca`, el **AcercaComponent**.  
-- Los links en `<nav>` deben cambiar la vista **sin recargar la página**.
-
-Si no navega: revisa `RouterLink` y que `RouterOutlet` esté importado en `App`.
-
----
-
-## 9) Solución de errores comunes
-
-###`routerLink` no hace nada
-
-**Causa:** `RouterLink` o `RouterOutlet` no importados en `App`.  
-**Solución:** agrega en `app.ts`:
-```ts
-imports: [RouterOutlet, RouterLink, RouterLinkActive]
+**`usuario.css`**
+```css
+h2{margin-bottom:12px}
+input{margin-right:8px}
 ```
 
----
-
-###  `NG0401: Missing Platform`
-
-**Causa:** `main.server.ts` no pasa `BootstrapContext` o falta `provideServerRendering()`.  
-**Solución:** en `main.server.ts`:
+### 3.2 Servicio `UsuarioService`
+Crea `src/app/service/usuario.service.ts`:
 
 ```ts
-import { bootstrapApplication, BootstrapContext } from '@angular/platform-browser';
-import { provideServerRendering } from '@angular/platform-server';
-import { App } from './app/app';
-import { appConfig } from './app/app.config';
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
 
-export default function bootstrap(context: BootstrapContext) {
-  return bootstrapApplication(
-    App,
-    {
-      ...appConfig,
-      providers: [...(appConfig.providers ?? []), provideServerRendering()],
-    },
-    context
-  );
+export interface Usuario { id?: number; nombre: string; }
+
+@Injectable({ providedIn: 'root' })
+export class UsuarioService {
+  // Usa proxy en dev o habilita CORS en el backend:
+  // - con proxy: '/api/v1/usuario'
+  // - sin proxy: 'http://localhost:8080/api/v1/usuario'
+  private readonly apiUrl = '/api/v1/usuario';
+
+  constructor(private http: HttpClient) {}
+
+  getAll(): Observable<Usuario[]> {
+    return this.http.get<Usuario[]>(this.apiUrl);
+  }
+  create(usuario: Usuario): Observable<Usuario> {
+    return this.http.post<Usuario>(this.apiUrl, usuario);
+  }
 }
 ```
 
 ---
 
-## 10) Checklist final
+## 4) (Opcional) Proxy Angular para evitar CORS en dev
 
-- [x] `<base href="/">` en `index.html`
-- [x] `<router-outlet>` en `app.html`
-- [x] `imports: [RouterOutlet, RouterLink, RouterLinkActive]` en `App`
-- [x] `provideRouter(routes)` en `app.config.ts`
-- [x] Rutas correctas en `app.routes.ts`
-- [x] `ng serve` o `npm run dev:ssr` según el modo
+Crea `proxy.conf.json` en la raíz del proyecto:
+```json
+{
+  "/api": {
+    "target": "http://localhost:8080",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}
+```
+
+Lanza con:
+```bash
+ng serve --proxy-config proxy.conf.json
+```
+
+Y en el servicio usa rutas relativas: `'/api/v1/usuario'`.
 
 ---
 
-## 11) Conclusión
+## 5) Troubleshooting esencial
 
-Esta versión de la guía incorpora todos los ajustes necesarios para que el router de Angular 20 funcione correctamente en **standalone mode**, evitando los errores de navegación y NG0401.  
-A partir de esta base, puedes extender el proyecto para los siguientes días de entrenamiento (Data Binding, Servicios, Formularios, etc.).
+### 5.1 `NG0401: Missing Platform / NgFor not found`
+- Asegúrate de **standalone: true** y en el componente **imports: [CommonModule, FormsModule]**.
+- Alternativa moderna: usa `@for`/`@if` (Angular 17+) y no necesitas `CommonModule`.
+
+### 5.2 ENOSPC: System limit for file watchers
+Linux alcanzó el límite de watchers:
+```bash
+sudo sysctl fs.inotify.max_user_watches=524288
+sudo sysctl fs.inotify.max_user_instances=1024
+echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf
+echo fs.inotify.max_user_instances=1024 | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+### 5.3 CORS / 403 en POST
+- Usa **proxy Angular** (sección 4) **o** habilita CORS/CSRF en Spring Security.
+
+### 5.4 500 – Tabla “usuario” no encontrada (cuando back es H2)
+- En Spring: `spring.jpa.hibernate.ddl-auto=update`
+- Ver consola H2 y que la entidad tenga `@GeneratedValue(strategy=IDENTITY)` con `Long id`.
 
 ---
+
+## 6) (Opcional) SSR con Vite
+
+Para añadir SSR en un proyecto nuevo:
+```bash
+ng new app-ssr --ssr=true
+```
+Revisa que existan `main.server.ts`, `app.config.server.ts` y scripts adicionales. Si ves errores como **NG0401** en SSR, confirma que los imports server estén correctos (p. ej., no usar APIs del navegador en server).
+
+---
+
+## 7) Prueba final
+
+1. Arranca el backend (si aplica).  
+2. `npm start` (o `ng serve --proxy-config proxy.conf.json`)  
+3. Ve a **/usuario** (ruta raíz en esta guía).  
+4. Crea usuarios y verifica en la consola que se listan.
+
+¡Día 1 completado! 

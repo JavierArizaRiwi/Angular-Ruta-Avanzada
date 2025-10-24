@@ -1,261 +1,390 @@
-# Entrenamiento Angular – Día 3: Servicios e HttpClient
+# Entrenamiento Angular – **Día 3: Servicios e HttpClient**
+_Guía paso a paso con imports, configuración standalone y ejemplos comentados_
 
-## Objetivos
-- Comprender qué son los servicios y por qué se usan en Angular.
-- Crear servicios inyectables para encapsular lógica de datos.
-- Configurar y usar HttpClient para consumir APIs REST (GET, POST, PUT, DELETE).
-- Manejar errores básicos con RxJS y suscripción.
-- Comprender el ciclo de vida y la inyección de dependencias.
-
----
-
-## 1) ¿Qué es un Servicio en Angular?
-
-Un **servicio** es una clase que encapsula lógica reutilizable y desacoplada de la vista.  
-Su propósito es centralizar operaciones como:
-- Comunicación con APIs externas.
-- Manejo de datos compartidos entre componentes.
-- Lógica de negocio o transformaciones de datos.
-
-Angular usa **Dependency Injection (DI)** para proveer servicios a componentes, asegurando bajo acoplamiento y testabilidad.
+> Objetivos del día
+>
+> - Comprender qué son los **servicios** y por qué se usan en Angular.
+> - Crear servicios **inyectables** para encapsular lógica de datos.
+> - Configurar y usar **HttpClient** para consumir APIs REST (GET/POST/PUT/DELETE).
+> - Manejar errores básicos con **RxJS** y `subscribe`/`catchError`.
+> - Entender el **ciclo de vida** y la **inyección de dependencias** (DI).
 
 ---
 
-## 2) Configuración inicial
+## 0) Conceptos clave
 
-Para poder consumir APIs, debemos importar el módulo **HttpClientModule**.
+- Un **servicio** es una clase reusable, sin UI, que concentra lógica de negocio (por ejemplo, llamadas HTTP).
+- Angular usa **Dependency Injection (DI)** para proveer instancias a componentes (por constructor).
+- `HttpClient` expone métodos (`get`, `post`, `put`, `delete`) que devuelven **Observables** (RxJS).
 
-### En proyectos standalone modernos
+---
 
-Si estás usando Angular 17+ (sin `AppModule`), importa el módulo en `app.config.ts`:
+## 1) Configuración global — Standalone (Angular 17–20)
 
-```typescript
-import { ApplicationConfig, importProvidersFrom } from '@angular/core';
-import { HttpClientModule } from '@angular/common/http';
+En proyectos **standalone** no hay `AppModule`. Debes **proveer** Router y HttpClient en `app.config.ts` y arrancar la app en `main.ts`.
+
+### 1.1 `app.config.ts` — Proveedores globales
+```ts
+// app/app.config.ts
+import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
+import { provideHttpClient } from '@angular/common/http';
 import { routes } from './app.routes';
 
+/**
+ * Configuración global de la aplicación (standalone).
+ * - Router: navegación entre pantallas.
+ * - HttpClient: peticiones HTTP disponibles en toda la app.
+ * - Error listeners y coalescing: utilidades opcionales.
+ */
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideRouter(routes),
-    importProvidersFrom(HttpClientModule)
+    provideBrowserGlobalErrorListeners(),                    // (opcional) Registro de errores del navegador
+    provideZoneChangeDetection({ eventCoalescing: true }),   // (opcional) Optimización de CD
+    provideRouter(routes),                                   // Router
+    provideHttpClient()                                      // HttpClient disponible globalmente
   ]
 };
 ```
 
-### En proyectos clásicos (con módulos)
+> **Alternativa clásica** (proyectos con `AppModule`): importar `HttpClientModule` en el `@NgModule.imports`.
 
-Si tu proyecto aún usa módulos tradicionales (`app.module.ts`):
+### 1.2 `main.ts` — Bootstrap
+```ts
+// main.ts
+import { bootstrapApplication } from '@angular/platform-browser';
+import { AppComponent } from './app/app.component';
+import { appConfig } from './app/app.config';
 
-```typescript
-import { HttpClientModule } from '@angular/common/http';
-import { NgModule } from '@angular/core';
-
-@NgModule({
-  imports: [HttpClientModule]
-})
-export class AppModule {}
+bootstrapApplication(AppComponent, appConfig)
+  .catch(err => console.error(err));
 ```
 
-Esto habilita el uso global de `HttpClient` en toda la aplicación.
+### 1.3 `app.component.ts` — Host con Router
+```ts
+// app/app.component.ts
+import { Component } from '@angular/core';
+import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+
+/**
+ * Componente raíz (host) que aloja el <router-outlet>.
+ * Al ser standalone, debemos declarar explícitamente sus imports.
+ */
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  template: `
+    <nav class="nav">
+      <a routerLink="/usuario" routerLinkActive="active">Usuarios</a>
+    </nav>
+    <router-outlet></router-outlet>
+  `,
+  styles: [`.nav{display:flex;gap:12px;margin-bottom:16px}`]
+})
+export class AppComponent {}
+```
 
 ---
 
-## 3) Crear un Servicio de Datos
+## 2) Rutas de la app
 
-Generar un servicio usando Angular CLI:
-```bash
-ng generate service tareas
+Creamos una ruta para el **feature** `Usuario`.
+
+```ts
+// app/app.routes.ts
+import { Routes } from '@angular/router';
+import { UsuarioComponent } from './usuario/usuario.component';
+
+export const routes: Routes = [
+  { path: '', redirectTo: 'usuario', pathMatch: 'full' },
+  { path: 'usuario', component: UsuarioComponent },
+  // { path: '**', loadComponent: () => import('./not-found/not-found.component').then(m => m.NotFoundComponent) }
+];
 ```
 
-Esto crea dos archivos:
-- `tareas.service.ts` → código del servicio.
-- `tareas.service.spec.ts` → pruebas automáticas.
+---
 
-### Código base del servicio
+## 3) Servicio de datos (CRUD) — **con tipos y comentarios**
 
-```typescript
+> Archivo: `src/app/service/usuario.service.ts`
+
+```ts
+// Importaciones necesarias para el servicio
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
-@Injectable({ providedIn: 'root' })
-export class TareasService {
-  private apiUrl = 'http://localhost:8080/api/tareas';
+/**
+ * Interfaz que representa la estructura de un usuario
+ * - Tipar los datos ayuda a detectar errores en tiempo de compilación
+ */
+export interface Usuario {
+  id?: number;    // Identificador único (opcional al crear)
+  nombre: string; // Nombre del usuario
+}
 
+/**
+ * Servicio para gestionar operaciones CRUD de usuarios
+ * - @Injectable({ providedIn: 'root' }) expone el servicio como singleton global
+ * - Usa HttpClient para llamar a la API
+ */
+@Injectable({ providedIn: 'root' })
+export class UsuarioService {
+  /** URL base de la API para usuarios (puedes moverla a environments) */
+  private readonly apiUrl = 'http://localhost:8080/api/v1/usuario';
+  // Si usas proxy Angular en dev, deja '/api/v1/usuario' y configura proxy.conf.json
+
+  /** Inyección de HttpClient para realizar peticiones HTTP */
   constructor(private http: HttpClient) {}
 
-  get(): Observable<any[]> {
-    return this.http.get<any[]>(this.apiUrl);
+  /** Obtiene la lista de todos los usuarios */
+  getAll(): Observable<Usuario[]> {
+    return this.http.get<Usuario[]>(this.apiUrl);
   }
 
-  create(t: any): Observable<any> {
-    return this.http.post(this.apiUrl, t);
+  /** Obtiene un usuario por su ID */
+  getById(id: number): Observable<Usuario> {
+    return this.http.get<Usuario>(`${this.apiUrl}/${id}`);
   }
 
-  update(id: number, t: any): Observable<any> {
-    return this.http.put(`${this.apiUrl}/${id}`, t);
+  /** Crea un nuevo usuario */
+  create(usuario: Usuario): Observable<Usuario> {
+    return this.http.post<Usuario>(this.apiUrl, usuario);
   }
 
-  remove(id: number): Observable<any> {
-    return this.http.delete(`${this.apiUrl}/${id}`);
+  /** Actualiza un usuario existente */
+  update(id: number, usuario: Usuario): Observable<Usuario> {
+    return this.http.put<Usuario>(`${this.apiUrl}/${id}`, usuario);
+  }
+
+  /** Elimina un usuario por su ID */
+  delete(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/${id}`);
   }
 }
 ```
 
-**Claves:**
-- `@Injectable({ providedIn: 'root' })` → hace que el servicio esté disponible en toda la app sin declararlo en módulos.
-- `HttpClient` → maneja las peticiones HTTP.
-- Cada método retorna un `Observable` (de **RxJS**) al cual el componente se suscribe.
+> **Por qué estas importaciones**:
+> - `@angular/core` → `Injectable` para registrar el servicio en el DI container.
+> - `@angular/common/http` → `HttpClient` para llamadas REST tipadas.
+> - `rxjs` → `Observable` para trabajar asincronía con suscripciones.
 
 ---
 
-## 4) Inyección de dependencias (Dependency Injection)
+## 4) Componente standalone que consume el servicio — **con imports explicados**
 
-Angular inyecta automáticamente los servicios en los componentes que los declaran en el constructor:
+> Archivos: `src/app/usuario/usuario.component.ts`, `usuario.html`, `usuario.css`
 
-```typescript
-constructor(private svc: TareasService) {}
-```
-
-Esto se denomina **inyección por constructor** y evita usar `@Autowired` o instanciar manualmente con `new`.
-
-Ventajas:
-- Desacopla la lógica del componente.
-- Permite reutilizar código.
-- Facilita las pruebas unitarias (mocks o spies).
-
----
-
-## 5) Usar el servicio en un componente
-
-Ejemplo de uso en `lista-tareas.component.ts`:
-
-```typescript
+### 4.1 `usuario.component.ts`
+```ts
+// Importaciones necesarias para el componente Usuario
 import { Component, OnInit } from '@angular/core';
-import { TareasService } from '../tareas.service';
+import { FormsModule } from '@angular/forms';   // Requerido por [(ngModel)]
+import { CommonModule } from '@angular/common'; // Requerido por *ngIf y *ngFor
+import { UsuarioService, Usuario } from '../service/usuario.service';
 
+/**
+ * Componente para gestionar usuarios en la aplicación.
+ * - Lista y agrega usuarios utilizando el UsuarioService.
+ * - Demuestra Interpolación, Event Binding, Two-way Binding y directivas.
+ */
 @Component({
-  selector: 'app-lista-tareas',
-  templateUrl: './lista-tareas.component.html'
+  selector: 'app-usuario',
+  standalone: true,                     // Necesario para que 'imports' funcione
+  imports: [FormsModule, CommonModule], // Habilita [(ngModel)], *ngIf, *ngFor en este componente
+  templateUrl: './usuario.html',
+  styleUrls: ['./usuario.css'],         // Nota: plural correcto
 })
-export class ListaTareasComponent implements OnInit {
-  tareas: any[] = [];
-  nuevaTarea: string = "";
+export class UsuarioComponent implements OnInit {
+  /** Nombre del usuario a agregar (enlazado al input) */
+  nombre = 'Coder';
 
-  constructor(private svc: TareasService) {}
+  /** Lista de usuarios obtenida desde la API */
+  listUsuarios: Usuario[] = [];
 
-  ngOnInit() {
-    this.cargar();
+  /** Inyección del servicio UsuarioService para operaciones CRUD */
+  constructor(private svc: UsuarioService) {}
+
+  /** Ciclo de vida: carga la lista al iniciar */
+  ngOnInit(): void {
+    this.listarUsuarios();
   }
 
-  cargar() {
-    this.svc.get().subscribe({
-      next: data => this.tareas = data,
-      error: err => console.error('Error cargando tareas', err)
+  /** Llama al servicio para crear un usuario y vuelve a listar */
+  agregarUsuario(): void {
+    const nuevo: Usuario = { nombre: this.nombre?.trim() };
+    if (!nuevo.nombre) { alert('El nombre es requerido'); return; }
+
+    this.svc.create(nuevo).subscribe({
+      next: () => this.listarUsuarios(),
+      error: (e) => console.error('Error al crear usuario:', e),
     });
   }
 
-  guardar() {
-    if (this.nuevaTarea.trim()) {
-      this.svc.create({ titulo: this.nuevaTarea }).subscribe({
-        next: () => this.cargar(),
-        error: err => console.error('Error creando tarea', err)
-      });
-      this.nuevaTarea = "";
-    }
-  }
-
-  eliminar(id: number) {
-    this.svc.remove(id).subscribe(() => this.cargar());
+  /** Llama al servicio para obtener todos los usuarios */
+  listarUsuarios(): void {
+    this.svc.getAll().subscribe({
+      next: (usuarios) => {
+        console.log('Usuarios obtenidos:', usuarios);
+        // Si tu API pagina (ej: {content: []}), adapta:
+        this.listUsuarios = Array.isArray(usuarios) ? usuarios : (usuarios as any)?.content ?? [];
+      },
+      error: (e) => console.error('Error al listar usuarios:', e),
+    });
   }
 }
 ```
 
-**Puntos importantes:**
-- `ngOnInit()` carga las tareas al iniciar el componente.
-- Cada método del servicio se **suscribe** para recibir datos o errores.
-- La UI se actualiza automáticamente al cambiar el arreglo `tareas`.
+### 4.2 `usuario.html`
+```html
+<h2>Gestión de Usuarios</h2>
+
+<!-- Two-way binding: sincroniza input ↔ propiedad 'nombre' -->
+<input [(ngModel)]="nombre" name="nombre" placeholder="Nombre" />
+
+<!-- Event binding: ejecuta métodos del componente -->
+<button (click)="agregarUsuario()">Agregar</button>
+<button (click)="listarUsuarios()">Listar</button>
+
+<!-- *ngIf para mostrar la lista solo si hay elementos -->
+<ul *ngIf="listUsuarios.length > 0; else noData">
+  <li *ngFor="let u of listUsuarios">{{ u.nombre }}</li>
+</ul>
+
+<ng-template #noData>
+  <p>No hay usuarios registrados.</p>
+</ng-template>
+```
+
+### 4.3 `usuario.css`
+```css
+h2{margin-bottom:12px}
+input{margin-right:8px}
+button{margin-right:6px}
+```
+
+> **Por qué estas importaciones**:
+> - `FormsModule` → habilita `[(ngModel)]` para two-way binding en inputs.
+> - `CommonModule` → habilita directivas `*ngIf` y `*ngFor`.
+> - `standalone: true` + `imports: [...]` → patrón moderno sin `NgModule`.
 
 ---
 
-## 6) Manejo de errores con RxJS
+## 5) Manejo de errores con RxJS
 
-Angular usa **Observables** para manejar datos asincrónicos.  
-Podemos capturar errores usando `catchError` de **RxJS**.
+Puedes manejar errores en el servicio (para centralizar) o en el componente (por caso).
 
-```typescript
+### 5.1 En el servicio (centralizado)
+```ts
 import { catchError, throwError } from 'rxjs';
 
-get(): Observable<any[]> {
-  return this.http.get<any[]>(this.apiUrl).pipe(
+getAll(): Observable<Usuario[]> {
+  return this.http.get<Usuario[]>(this.apiUrl).pipe(
     catchError(err => {
-      console.error('Error en la petición', err);
-      return throwError(() => new Error('Error al obtener las tareas'));
+      console.error('[UsuarioService] getAll error', err);
+      return throwError(() => new Error('Error al obtener usuarios'));
     })
   );
 }
 ```
 
-También puedes manejar errores globales con un **interceptor HTTP**, que veremos en sesiones posteriores.
-
----
-
-## 7) Ejemplo de vista (HTML)
-
-```html
-<h2>Gestión de Tareas (con Servicio)</h2>
-
-<input [(ngModel)]="nuevaTarea" placeholder="Nueva tarea">
-<button (click)="guardar()">Agregar</button>
-
-<ul>
-  <li *ngFor="let tarea of tareas">
-    {{ tarea.titulo }}
-    <button (click)="eliminar(tarea.id)">Eliminar</button>
-  </li>
-</ul>
+### 5.2 En el componente (por operación)
+```ts
+this.svc.create(nuevo).subscribe({
+  next: () => this.listarUsuarios(),
+  error: (e) => {
+    if (e.status === 409) alert('Nombre duplicado.');
+    else if (e.status === 403) alert('No autorizado (CORS/CSRF).');
+    else alert('Error al crear usuario.');
+    console.error(e);
+  }
+});
 ```
 
-**Conceptos aplicados:**
-- Two-way binding para el input (`[(ngModel)]`).
-- Event binding para botones (`(click)`).
-- Uso de `*ngFor` para renderizar las tareas dinámicamente.
+---
+
+## 6) Environments y URLs
+
+Centraliza URLs en `src/environments` (útil para cambiar host por entorno).
+
+```ts
+// environments/environment.ts
+export const environment = {
+  production: false,
+  api: 'http://localhost:8080/api/v1'
+};
+```
+
+```ts
+// usuario.service.ts
+private readonly apiUrl = `${environment.api}/usuario`;
+```
+
+> Recuerda configurar `fileReplacements` en `angular.json` para `environment.prod.ts`.
 
 ---
 
-## 8) Ejercicio del día
+## 7) Evitar CORS en desarrollo (proxy Angular)
 
-1. Crear el servicio `TareasService` con los métodos `get`, `create`, `update`, `remove`.
-2. Inyectarlo en `lista-tareas.component.ts`.
-3. Mostrar la lista de tareas obtenida desde una API.
-4. Implementar creación y eliminación de tareas desde la interfaz.
-5. Agregar manejo de errores en consola con `catchError` o `subscribe(error)`.
-
-### Resultado esperado
-- Al iniciar la app, se cargan tareas desde `http://localhost:8080/api/tareas`.
-- Se pueden crear nuevas tareas.
-- Se pueden eliminar tareas existentes.
-- La lista se actualiza automáticamente después de cada operación.
-
----
-
-## 9) Recomendaciones prácticas
-
-- Mantén las URLs en un archivo de **configuración** o en `environment.ts`.
-- Evita repetir código HTTP; reutiliza servicios para cada entidad.
-- No manipules `HttpClient` directamente desde los componentes.
-- Usa **tipado estricto** en los modelos de datos (ej. `Tarea { id: number; titulo: string; }`).
-- Implementa interceptores para manejar autenticación o logs.
+Crea `proxy.conf.json` en la raíz del proyecto:
+```json
+{
+  "/api": {
+    "target": "http://localhost:8080",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}
+```
+Lanza:
+```bash
+ng serve --proxy-config proxy.conf.json
+```
+Y usa rutas relativas en el servicio: `private readonly apiUrl = '/api/v1/usuario';`
 
 ---
 
-## 10) Conclusiones
+## 8) Troubleshooting rápido
 
-- Los **servicios** permiten un código más limpio, reutilizable y mantenible.
-- `HttpClient` facilita la comunicación con APIs RESTful de manera tipada.
-- RxJS potencia el manejo de flujos asíncronos con operadores.
-- La inyección de dependencias en Angular evita acoplamientos y promueve la modularidad.
-- Con estos fundamentos, ya puedes conectar tu frontend Angular con un backend real.
+- **`*ngFor/*ngIf not found`** → falta `CommonModule` en `imports` del componente (o usa `@for/@if` en Angular 17+).
+- **`Can’t bind to ngModel`** → falta `FormsModule` y `name="..."` en el input.
+- **403 (Forbidden)** en POST → CORS/CSRF backend (usa proxy o habilita CORS en Spring Security).
+- **409 (Conflict)** → registro duplicado según reglas del backend.
+- **500 (Table not found / tipos)** → en H2/MySQL, ajusta entidad y `spring.jpa.hibernate.ddl-auto=update`.
+- **ENOSPC watchers (Linux)** → aumenta límites de inotify (ver Día 1).
 
 ---
+
+## 9) Ejercicio del día
+
+1. Implementa `getById`, `update`, `delete` en UI (botones y formulario).  
+2. Muestra errores legibles en la interfaz (ej. toast/alert) según código HTTP.  
+3. Extra: crea un `UsuarioStoreService` (BehaviorSubject) para compartir estado entre componentes.
+
+---
+
+## 10) Resumen
+
+- Los **servicios** encapsulan la lógica de datos y facilitan testeo y reutilización.
+- `HttpClient` + `Observable` es el combo base para hablar con APIs REST.
+- Con **standalone**, recuerda **proveer** Router/HttpClient en `app.config.ts` y **importar** `FormsModule`/`CommonModule` en cada componente que lo requiera.
+- Dominar estos conceptos deja tu app lista para **interceptores**, **guards** y **comunicación entre componentes** (Día 4).
+
+---
+
+### Anexo A — Variante clásica con `HttpClientModule` (AppModule)
+```ts
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { HttpClientModule } from '@angular/common/http';
+import { AppComponent } from './app.component';
+
+@NgModule({
+  declarations: [AppComponent],
+  imports: [BrowserModule, HttpClientModule],
+  bootstrap: [AppComponent]
+})
+export class AppModule {}
+```
